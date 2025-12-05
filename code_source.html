@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Audio Visualisation</title>
+<style>
+        
+        
+    </style>
+
+
+<style>
+  html,body{
+    height:100%;
+    margin:0;
+    background:#02030a;
+    color:#9d8686;
+    font-family:system-ui;
+    overflow:hidden;
+  }
+
+
+  
+
+  
+  #bgStars{
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    overflow: hidden;
+  }
+  .star{
+    position:absolute;
+    border-radius:50%;
+    background:white;
+    opacity:0;
+    animation: twinkle 4s infinite ease-in-out;
+  }
+  @keyframes twinkle{
+    0%{opacity:0;}
+    50%{opacity:1;}
+    100%{opacity:0;}
+  }
+
+  
+  #controls{
+    position:fixed;
+    left:12px;
+    top:12px;
+    z-index:20;
+    display:flex;
+    gap:8px;
+    align-items:center;
+    background:rgba(0,0,0,0.35);
+    padding:8px;
+    border-radius:8px;
+    backdrop-filter: blur(4px);
+  }
+  button,input,select{
+    padding:8px 10px;
+    border-radius:6px;
+    border:0;
+    background:#111;
+    color:#fff;
+    cursor:pointer;
+    font-size:14px;
+  }
+
+  canvas{
+    display:block;
+    width:100vw;
+    height:100vh;
+  }
+</style>
+</head>
+<body>
+  
+
+
+<div id="nebulaBg"></div>
+
+
+<div id="bgStars"></div>
+
+
+<div id="controls">
+  <input id="file" type="file" accept="audio/*">
+  <button id="mic">Micro</button>
+  <select id="modeSelect"></select>
+</div>
+
+<canvas id="c"></canvas>
+<script>
+function createStarBg(){
+  const bg = document.getElementById("bgStars");
+  const total = 200;
+
+  for(let i=0;i<total;i++){
+    const s = document.createElement("div");
+    s.className="star";
+
+    const size = Math.random()*3 + 1;
+    s.style.width = size+"px";
+    s.style.height = size+"px";
+
+    s.style.left = Math.random()*100+"vw";
+    s.style.top = Math.random()*100+"vh";
+
+    s.style.animationDelay = (Math.random()*6)+"s";
+
+    bg.appendChild(s);
+  }
+}
+createStarBg();
+
+(async function(){
+  const canvas=document.getElementById("c");
+  const ctx=canvas.getContext("2d");
+  let W,H;
+  function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;}
+  resize();
+  addEventListener("resize",resize);
+
+  const audioCtx=new AudioContext();
+  const analyser=audioCtx.createAnalyser();
+  analyser.fftSize=1024;
+  const bufferLength=analyser.frequencyBinCount;
+  const dataArray=new Uint8Array(bufferLength);
+
+  let sourceNode=null, mediaStream=null;
+  function connectStream(node){
+    if(sourceNode) try{sourceNode.disconnect();}catch(e){}
+    sourceNode=node;
+    sourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  }
+
+
+  const fileEl=document.getElementById("file");
+  const micBtn=document.getElementById("mic");
+  const modeSelect=document.getElementById("modeSelect");
+
+ 
+  const combos=[
+    "Bars + Radial",
+    "Particles + VU",
+    "Tunnel + Bars",
+    "Particles + Radial",
+    "Bars + VU",
+    "Sinus Wave",
+   
+  ];
+  combos.forEach((txt,i)=>{
+    const o=document.createElement("option");
+    o.value=i;
+    o.textContent=txt;
+    modeSelect.appendChild(o);
+  });
+
+  let mode=0;
+  modeSelect.addEventListener("change",e=>mode=+e.target.value);
+
+ 
+  fileEl.addEventListener("change",async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null;}
+
+    const ab=await f.arrayBuffer();
+    const buf=await audioCtx.decodeAudioData(ab);
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf; src.loop=true;
+    connectStream(src);
+    src.start();
+  });
+
+ 
+  micBtn.addEventListener("click",async ()=>{
+    if(mediaStream){
+      mediaStream.getTracks().forEach(t=>t.stop());
+      mediaStream=null;
+      micBtn.textContent="Micro";
+      return;
+    }
+    mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    connectStream(audioCtx.createMediaStreamSource(mediaStream));
+    micBtn.textContent="Stop";
+  });
+
+  function avg(a,b){
+    let s=0,c=0;
+    for(let i=a;i<b;i++){ s+=dataArray[i]; c++; }
+    return (s/c)/255;
+  }
+
+  let boost=1;
+  function autoGain(v){
+    boost = 0.9*boost + 0.1*(1/(v+0.05));
+    return Math.min(v*boost,1);
+  }
+
+
+  const particles=[];
+  function initParticles(){
+    particles.length=0;
+    for(let i=0;i<120;i++){
+      particles.push({
+        x:Math.random()*W,
+        y:Math.random()*H,
+        vx:(Math.random()-0.5)*1.2,
+        vy:(Math.random()-0.5)*1.2,
+        s:2+Math.random()*4
+      });
+    }
+  }
+  initParticles();
+
+  function drawParticles(intensity){
+    for(const p of particles){
+      p.x+=p.vx*(1+intensity*3);
+      p.y+=p.vy*(1+intensity*3);
+      if(p.x<0||p.x>W) p.vx*=-1;
+      if(p.y<0||p.y>H) p.vy*=-1;
+      ctx.fillStyle=`hsl(${200+intensity*160},100%,60%)`;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.s+intensity*6,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawBars(){
+    const barW=W/(bufferLength/2);
+    for(let i=0;i<bufferLength;i+=2){
+      const v=dataArray[i]/255;
+      const h=v*H*0.7;
+      ctx.fillStyle=`hsl(${i/bufferLength*360},100%,55%)`;
+      ctx.fillRect(i*barW, H-h, barW*0.8, h);
+    }
+  }
+
+  function drawRadial(){
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    ctx.beginPath();
+    for(let a=0;a<360;a++){
+      const idx=(a/360)*bufferLength|0;
+      const v=dataArray[idx]/255;
+      const r=120+v*300;
+      const ang=a*Math.PI/180;
+      const x=Math.cos(ang)*r;
+      const y=Math.sin(ang)*r;
+      if(a==0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle="hsl(300,100%,70%)";
+    ctx.lineWidth=3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTunnel(){
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    const t=performance.now()/800;
+    for(let i=0;i<bufferLength;i+=6){
+      const v=dataArray[i]/255;
+      const a=i/bufferLength*Math.PI*12 + t;
+      const r=60+v*350;
+      ctx.fillStyle=`hsl(${v*360},100%,55%)`;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a)*r, Math.sin(a)*r, 4+v*6, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawVU(){
+    const val = autoGain(avg(0,bufferLength*0.5));
+    const w = W * (0.15 + val*0.8);
+    const h = H * 0.08;
+    ctx.fillStyle=`hsl(${val*120},100%,55%)`;
+    ctx.fillRect(W/2 - w/2, H/2 - h/2, w, h);
+  }
+
+  function drawSine(){
+    ctx.save();
+    ctx.strokeStyle="cyan";
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    for(let x=0;x<W;x++){
+      const idx = Math.floor((x/W)*bufferLength);
+      const v = dataArray[idx]/255;
+      const y = H/2 + Math.sin(x*0.02 + performance.now()*0.005)*(80+v*200);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMathField(){
+    const t=performance.now()*0.002;
+    for(let x=0;x<W;x+=20){
+      for(let y=0;y<H;y+=20){
+        const v = Math.cos((x*0.02)+(y*0.02)+t);
+        ctx.fillStyle = `hsl(${(v+1)*180},100%,55%)`;
+        ctx.fillRect(x,y,18,18);
+      }
+    }
+  }
+
+ 
+  function draw(){
+    requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+
+    ctx.fillStyle="#05050a";
+    ctx.fillRect(0,0,W,H);
+
+    const intensity = autoGain(avg(5,bufferLength*0.5));
+
+    if(mode===0){ drawBars(); drawRadial(); }
+    if(mode===1){ drawParticles(intensity); drawVU(); }
+    if(mode===2){ drawTunnel(); drawBars(); }
+    if(mode===3){ drawParticles(intensity); drawRadial(); }
+    if(mode===4){ drawBars(); drawVU(); }
+    if(mode===5){ drawSine(); }
+   
+  }
+  draw();
+})();
+</script>
+
+</body>
+</html>

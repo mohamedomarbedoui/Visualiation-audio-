@@ -1,0 +1,11 @@
+Ce projet est une application web réalisée dans le cadre du défi national. Il utilise les technologies web (HTML, CSS, JavaScript) pour créer une visualisation audio interactive. L’objectif est de proposer une expérience immersive en transformant du son — qu’il soit importé via un fichier audio ou capté par le microphone — en animations visuelles dynamiques.
+Principales fonctionnalités:
+Lecture d’un fichier audio ou capture du son via le micro.
+Analyse en temps réel de l’audio avec l’API audio du navigateur.
+Plusieurs modes de visualisation graphique : barres, forme radiale, tunnel, particules, onde sinusoïdale, etc.
+Fond visuel animé (étoiles, ambiance sombre) pour une expérience immersive.
+Interface simple et responsive, sans dépendance externe, utilisant uniquement des technologies natives.
+L'utilité de ce projet : 
+Pour expérimenter l’utilisation de l’API Audio et du Canvas 2D.
+Pour démontrer qu’on peut créer un outil interactif et visuellement stylé uniquement avec HTML/CSS/JS.
+Pour proposer une application esthétique et ludique, accessible à tous, sans installation complexe.
